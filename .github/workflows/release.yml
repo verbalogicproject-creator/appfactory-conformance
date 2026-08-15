@@ -179,18 +179,24 @@ jobs:
             # "not verified" would be worse than no check at all.
             echo "apksigner not found under $SDK; falling back to a direct certificate read"
             pip install --quiet cryptography 2>/dev/null || true
+            # The heredoc body is indented to the block scalar's level on purpose.
+            # YAML strips that common indentation before the shell ever sees it, so
+            # the terminator still lands at column 0 for bash. Writing it flush-left
+            # here instead de-indents below the block and silently produces an
+            # INVALID WORKFLOW -- which GitHub reports as a failed run named after
+            # the file path rather than the workflow, with no parse error in the log.
             ACTUAL=$(python3 - "$APK" <<'PY'
-import hashlib, re, sys, zipfile
-from cryptography.hazmat.primitives.serialization import pkcs7, Encoding
+          import hashlib, re, sys, zipfile
+          from cryptography.hazmat.primitives.serialization import pkcs7, Encoding
 
-with zipfile.ZipFile(sys.argv[1]) as z:
-    blocks = [n for n in z.namelist() if re.fullmatch(r'META-INF/.*\.(RSA|DSA|EC)', n)]
-    if not blocks:
-        sys.exit("no PKCS#7 signature block in the APK")
-    certs = pkcs7.load_der_pkcs7_certificates(z.read(blocks[0]))
-    print(hashlib.sha256(certs[0].public_bytes(Encoding.DER)).hexdigest())
-PY
-)
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              blocks = [n for n in z.namelist() if re.fullmatch(r'META-INF/.*\.(RSA|DSA|EC)', n)]
+              if not blocks:
+                  sys.exit("no PKCS#7 signature block in the APK")
+              certs = pkcs7.load_der_pkcs7_certificates(z.read(blocks[0]))
+              print(hashlib.sha256(certs[0].public_bytes(Encoding.DER)).hexdigest())
+          PY
+            )
           fi
 
           if [ -z "$ACTUAL" ]; then

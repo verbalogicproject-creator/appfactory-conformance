@@ -221,6 +221,47 @@ PY
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# 8. Workflow YAML parses.
+#     An invalid workflow does not fail loudly. GitHub creates a run, attributes
+#     it to whatever push introduced the file, marks it failed, and names it
+#     after the FILE PATH instead of the workflow's `name:` -- because it could
+#     not read the name. `gh run view --log-failed` then returns "log not found",
+#     because no job ever started, so there is nothing to read.
+#
+#     The instance that motivated this: a heredoc written flush-left inside a
+#     `run: |` block scalar. Content less indented than the block terminates it,
+#     which is invalid YAML but looks entirely natural, because that is exactly
+#     where a heredoc belongs in a shell script.
+#
+#     Cost when missed: a tag pushed against a release workflow that could not
+#     run at all.
+# ---------------------------------------------------------------------------
+if [ -d .github/workflows ] && command -v python3 >/dev/null 2>&1; then
+  yaml_out=$(python3 - <<'PY' 2>/dev/null
+import glob, sys
+try:
+    import yaml
+except ImportError:
+    print("SKIP"); sys.exit(0)
+for f in sorted(glob.glob('.github/workflows/*.y*ml')):
+    try:
+        yaml.safe_load(open(f))
+    except Exception as e:
+        print(f"{f}: {str(e).splitlines()[0]}")
+PY
+)
+  if [ "$yaml_out" = "SKIP" ]; then
+    : # pyyaml unavailable; say nothing rather than claim a check that did not run
+  elif [ -n "$yaml_out" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && fail "invalid workflow YAML -- $line"
+    done <<< "$yaml_out"
+  else
+    pass "all workflow YAML files parse"
+  fi
+fi
+
 echo
 if [ $FAIL -eq 0 ]; then
   printf '\033[32mPreflight clean.\033[0m Push and watch: gh run watch --exit-status\n'
