@@ -186,6 +186,41 @@ if [ -n "${SRC_DIRS:-}" ] && grep -rqE '^\s*@(AndroidEntryPoint|HiltViewModel)\b
   [ $hilt_ok -eq 1 ] && pass "Hilt wiring complete (@HiltAndroidApp present and registered in manifest)"
 fi
 
+# ---------------------------------------------------------------------------
+# 7. Every XML resource is well-formed.
+#     Catches a build-stopping AAPT failure that no other check here can see,
+#     because it is a lexical fault rather than a structural one.
+#
+#     The instance that motivated this: an XML comment containing a double
+#     hyphen. The XML spec forbids it inside comments, so AAPT fails with a bare
+#     "ParseError at [row,col]" and no explanation. It is trivially easy to
+#     introduce by carrying an em-dash writing habit over from shell or Kotlin,
+#     where the same characters are harmless, and the file LOOKS correct.
+#
+#     Deliberately parsed with a real XML parser, not a regex. The first attempt
+#     at this used a regex and produced a false positive on the '-->' terminator
+#     itself, which is exactly the kind of nearly-right check that grants false
+#     confidence.
+# ---------------------------------------------------------------------------
+if command -v python3 >/dev/null 2>&1 && [ -d app/src ]; then
+  xml_bad=$(python3 - <<'PY' 2>/dev/null
+import glob, xml.etree.ElementTree as ET
+for f in sorted(glob.glob('app/src/**/*.xml', recursive=True)):
+    try:
+        ET.parse(f)
+    except ET.ParseError as e:
+        print(f"{f}: {e}")
+PY
+)
+  if [ -n "$xml_bad" ]; then
+    while IFS= read -r line; do
+      [ -n "$line" ] && fail "malformed XML resource -- $line"
+    done <<< "$xml_bad"
+  else
+    pass "all XML resources are well-formed"
+  fi
+fi
+
 echo
 if [ $FAIL -eq 0 ]; then
   printf '\033[32mPreflight clean.\033[0m Push and watch: gh run watch --exit-status\n'
