@@ -42,6 +42,13 @@ fi
 # 2. Files named by the build actually exist.
 #     Catches: proguardFiles pointing at a nonexistent proguard-rules.pro,
 #              google-services plugin applied with no google-services.json.
+#
+#     The pattern matches ANY identifier ending in proguardFile(s), because it
+#     originally matched only the lowercase `proguardFiles` and therefore sailed
+#     straight past `testProguardFiles("proguard-test-rules.pro")` -- reporting
+#     "every build-referenced file is present" while that file was deleted.
+#     Third time a check in this lineage has passed with its own bug present, and
+#     the first two both came from a pattern that was very nearly right.
 # ---------------------------------------------------------------------------
 missing_file=0
 while IFS= read -r f; do
@@ -50,7 +57,7 @@ while IFS= read -r f; do
     fail "build.gradle.kts references '$f' but no such file exists"
     missing_file=1
   fi
-done < <(perl -0777 -ne 'while (/proguardFiles?\s*\((.*?)\)\s*$/gms) {
+done < <(perl -0777 -ne 'while (/\w*[Pp]roguardFiles?\s*\((.*?)\)\s*$/gms) {
              my $b = $1; push @f, $b =~ /"([^"]+)"/g; }
            print "$_\n" for @f' app/build.gradle.kts 2>/dev/null \
          | grep -v '^proguard-android')
