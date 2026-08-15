@@ -68,6 +68,11 @@ gh run list --commit $(git rev-parse HEAD)
 gh run view <id> --log-failed
 ```
 
+**`--commit` requires the full 40-character SHA.** A short SHA returns an empty list
+with no error and exit 0 — which reads as "the run hasn't appeared yet" and invites
+falling back to `--limit 1`, the precise race this rule exists to prevent. Always
+`$(git rev-parse HEAD)`, never `$(git rev-parse --short HEAD)`.
+
 Fix the error the log names, lowest line number first. Kotlin reports one broken
 import as many errors; only the first is real, and "fixing" a cascade error makes
 correct code wrong.

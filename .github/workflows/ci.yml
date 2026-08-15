@@ -147,6 +147,23 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      # Room writes app/schemas/*.json under exportSchema = true, but it writes them
+      # ON THE RUNNER. They must be committed for MigrationTestHelper to validate a
+      # future migration against the schema that actually shipped.
+      #
+      # There is no local Android SDK here, so the only way to obtain the genuine
+      # file is to take it out of a build. Hand-writing a file that must byte-match
+      # generated output is precisely the failure that produced a fabricated
+      # font_certs.xml and killed an app at launch through eleven green builds.
+      - name: Upload generated Room schemas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-schemas-${{ steps.names.outputs.sha }}
+          path: app/schemas/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload unit test report
         if: always()
         uses: actions/upload-artifact@v4
