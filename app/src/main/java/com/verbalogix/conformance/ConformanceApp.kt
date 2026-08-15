@@ -27,4 +27,15 @@ class ConformanceApp : Application() {
         super.attachBaseContext(base)
         CrashLog.install(base)
     }
+
+    // NEGATIVE TEST for the launch smoke rung. Compiles clean, passes preflight,
+    // passes every unit test -- and kills the app at launch, which is exactly the
+    // shape of the three worst failures in this lineage.
+    //
+    // Deliberately in onCreate, AFTER CrashLog is installed in attachBaseContext,
+    // so this also proves the crash handler captures it and crash.txt is retrievable.
+    override fun onCreate() {
+        super.onCreate()
+        error("deliberate launch crash -- conformance negative test for the launch smoke rung")
+    }
 }
