@@ -22,8 +22,8 @@ displayed eleven green builds of an app which crashed before rendering a pixel.
 | 8 | The published APK's cert digest matches the pin | V7 | run 31872212446 `cert digest matches pin: 5b2d9ce7…7da7` (apksigner), **independently reproduced** on-device by `scripts/apk_cert.py` against the downloaded artifact | ☑ **checked** |
 | 9 | The APK installs on the physical device and runs | V7 | device screenshot 2026-08-15 11:02 — `hilt: graph built`, `room: 1 row(s)`, `notifications: granted`; all three are runtime facts, not compile-time ones | ☑ **checked** |
 | 10 | The on-screen git SHA matches the tagged commit | V7 | screen reports `commit b0a7cb6`; `git rev-parse v0.0.1^{}` = `b0a7cb6`; `code 1` matches the tag-derived versionCode | ☑ **checked** |
-| 11 | `v0.0.2` installs **over** `v0.0.1` | V6b | — | ☐ unchecked |
-| 12 | A Room 1→2 migration runs without data loss | V4 | — | ☐ unchecked |
+| 11 | `v0.0.2` installs **over** `v0.0.1` | V6b | run 31874112733: `upgrade OK: v0.0.1 -> v0.0.2` on API 28 **and** 34; both releases carry cert `5b2d9ce7…7da7` | ☑ **checked** |
+| 12 | A Room 1→2 migration runs without data loss | V6a | run 31874112733: `MigrationTest.migrate1To2_preservesExistingRows` passes against the genuinely-exported `1.json` from v0.0.1 | ☑ **checked** |
 | 13 | A real crash is retrieved and retraced via mapping.txt | V8 | — | ☐ unchecked |
 | 14 | Preflight catches all three bugs on `conformance/red` | V1 | — | ☐ unchecked |
 | 15 | The emulator rung is observably RED on `conformance/red` | V6a | — | ☐ unchecked |
