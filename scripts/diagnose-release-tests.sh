@@ -71,6 +71,14 @@ echo "=============================================================="
 TEST_MAP=app/build/outputs/mapping/releaseAndroidTest/mapping.txt
 if [ -f "$TEST_MAP" ]; then
   echo "androidTest mapping present ($(wc -l < "$TEST_MAP") lines)"
+  echo "--- are annotations retained? (RuntimeVisibleAnnotations) ---"
+  if grep -q "RuntimeVisibleAnnotations\|keepattributes" app/proguard-test-rules.pro; then
+    echo "  -keepattributes present in proguard-test-rules.pro"
+  else
+    echo "  NO -keepattributes -- AndroidJUnitRunner scans for @RunWith at runtime and"
+    echo "  R8 strips annotations by default. The runner finds the classes, finds no"
+    echo "  @RunWith, and reports nothing at all."
+  fi
   for cls in androidx.test.runner.AndroidJUnitRunner \
              com.verbalogix.conformance.LaunchTest \
              com.verbalogix.conformance.MigrationTest; do
