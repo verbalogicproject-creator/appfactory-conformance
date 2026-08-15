@@ -18,6 +18,18 @@
 -dontwarn org.checkerframework.**
 -dontwarn org.jetbrains.annotations.**
 
+# KEEP ANNOTATIONS. AndroidJUnitRunner discovers tests at RUNTIME by scanning the
+# dex for @RunWith, and R8 strips annotations by default.
+#
+# Without this the runner finds the classes (they are kept below), finds no @RunWith
+# on any of them, and produces NOTHING. `am instrument` then hangs until the job
+# timeout with an empty logcat -- no crash, no error, not even "0 tests found".
+#
+# Diagnosed in run 31879892593, which proved the APKs build, sign identically,
+# install, and register the instrumentation correctly, and that the runner then
+# simply never reports.
+-keepattributes *Annotation*, RuntimeVisibleAnnotations, AnnotationDefault, Signature, InnerClasses, EnclosingMethod
+
 # The instrumentation runner discovers test classes reflectively by name, so they
 # must survive minification and keep their names.
 -keep class androidx.test.** { *; }
