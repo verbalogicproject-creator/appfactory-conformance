@@ -91,8 +91,12 @@ jobs:
       #
       # A test suite that cannot fail is worse than no suite: it converts "untested"
       # into "verified" on the dashboard.
+      # Only speaks when the build actually produced results. On a compile failure
+      # "0 tests ran" is true but is not the root cause, and a second loud error
+      # competing with the real one is how three consecutive commits here once got
+      # "fixed" against a problem the log never named.
       - name: Fail if the test suite is vacuous
-        if: always()
+        if: steps.gradle.outcome == 'success'
         run: |
           shopt -s nullglob globstar
           total=0

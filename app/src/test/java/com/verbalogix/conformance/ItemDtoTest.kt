@@ -1,6 +1,11 @@
 package com.verbalogix.conformance
 
 import com.verbalogix.conformance.data.ItemDto
+// Required for the reified single-argument Json.encodeToString(value). Without it,
+// the call resolves to StringFormat.encodeToString(serializer, value) and fails with
+// "actual type is ItemDto, but SerializationStrategy<T> was expected" -- a confusing
+// message for what is really a missing import.
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Test
