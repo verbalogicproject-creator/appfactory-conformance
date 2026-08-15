@@ -19,6 +19,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): ConformanceDatabase =
         Room.databaseBuilder(context, ConformanceDatabase::class.java, ConformanceDatabase.NAME)
+            .addMigrations(ConformanceDatabase.MIGRATION_1_2)
             // No fallbackToDestructiveMigration. That flag silently wipes user data
             // when a migration is missing, turning a loud, fixable build-time problem
             // into quiet data loss in the field.

@@ -88,6 +88,47 @@ if [ -s "$OUT/crash.txt" ]; then
 fi
 
 echo
+echo "=============================================================="
+echo " 4. upgrade continuity -- does this install OVER the last release?"
+echo "=============================================================="
+# The failure with no recovery path. If the signing key changes, no installed device
+# will ever accept an update: Android rejects it with
+# INSTALL_FAILED_UPDATE_INCOMPATIBLE, and the entire installed cohort is orphaned
+# permanently. In the predecessor project every CI "release" was signed with the
+# runner's auto-generated debug keystore -- a different key each run -- and nothing
+# anywhere reported it.
+#
+# The cert-digest pin in release.yml catches this deterministically and earlier. This
+# is the empirical backstop: it asks Android itself.
+PREV=$(gh release list --limit 10 --json tagName --jq '.[].tagName' 2>/dev/null \
+       | grep -v "^${GITHUB_REF_NAME:-}$" | head -1)
+
+if [ -z "$PREV" ]; then
+  echo "no previous release to upgrade from; skipping (this is the first)"
+else
+  echo "previous release: $PREV"
+  rm -rf /tmp/prev && mkdir -p /tmp/prev
+  if gh release download "$PREV" -p '*.apk' -D /tmp/prev 2>/dev/null; then
+    PREV_APK=$(find /tmp/prev -name '*.apk' | head -1)
+    adb uninstall "$PKG" >/dev/null 2>&1 || true
+    if adb install "$PREV_APK" 2>&1 | tee "$OUT/install-prev.log" | grep -q 'Success'; then
+      echo "installed $PREV"
+      # -r replaces in place. It fails if the signing certificate differs.
+      if adb install -r "$APK" 2>&1 | tee "$OUT/upgrade.log" | grep -q 'Success'; then
+        echo "upgrade OK: $PREV -> ${GITHUB_REF_NAME:-current}"
+      else
+        cat "$OUT/upgrade.log"
+        fail "UPGRADE FAILED -- the new build cannot replace $PREV. Signing key drift orphans every install."
+      fi
+    else
+      echo "could not install $PREV; skipping the upgrade check"
+    fi
+  else
+    echo "could not download $PREV; skipping the upgrade check"
+  fi
+fi
+
+echo
 if [ "$FAILED" -eq 0 ]; then
   echo "PASS: the release build installs, launches, and survives."
 else

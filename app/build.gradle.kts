@@ -110,6 +110,16 @@ android {
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
+
+    // MigrationTestHelper reads the exported schemas at RUNTIME, from the test APK's
+    // assets. Without this the schemas exist in the repo, the test compiles, and it
+    // fails on device with "Cannot find the schema file in the assets folder" -- a
+    // build-config omission that presents as a test bug.
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDirs(files("$projectDir/schemas"))
+        }
+    }
 }
 
 // Room's exported schema JSON is what makes a migration test possible at all --

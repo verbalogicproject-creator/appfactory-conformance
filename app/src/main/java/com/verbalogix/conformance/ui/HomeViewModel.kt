@@ -29,7 +29,7 @@ class HomeViewModel @Inject constructor(
             // Write on first run so the Room path is genuinely exercised -- an empty
             // database proves the schema compiled, not that it works.
             if (itemDao.count() == 0) {
-                itemDao.insert(Item(label = "first run"))
+                itemDao.insert(Item(label = "first run", createdAt = System.currentTimeMillis()))
             }
             _itemCount.value = itemDao.count()
         }

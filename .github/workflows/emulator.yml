@@ -95,6 +95,9 @@ jobs:
           SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD || secrets.SIGNING_KEYSTORE_PASSWORD }}
           SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
+          # For the upgrade-continuity check, which downloads the previous release.
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         with:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
