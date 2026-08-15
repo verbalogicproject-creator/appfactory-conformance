@@ -18,9 +18,28 @@ What it checks
    instantiates them by string, so a rename is a launch crash that compiles
    perfectly -- the same class of failure as a missing @HiltAndroidApp.
 
-2. Fields of @Serializable classes must keep their names. They are the JSON wire
-   format; renaming them produces an app that runs, serializes, and silently
-   writes documents nothing else can read.
+2. Classes passed as extra arguments must be PRESENT at all. R8 shrinks unused
+   code, and a keep rule cannot preserve a class that was deleted for being dead.
+   Found for real: the conformance DTO was absent from the shipped v0.0.2 APK,
+   silently voiding every claim the suite made about minifying it.
+
+NOT checked: @Serializable field names.
+   An earlier version asserted these must survive, on the assumption that they are
+   the JSON wire format. They are not. kotlinx.serialization's generated descriptor
+   holds the wire names as STRING LITERALS baked in at compile time
+   (`addElement("id")`), so renaming the Kotlin field to `a` changes nothing about
+   the emitted JSON.
+
+   That assertion was a FALSE POSITIVE, and a false positive is as corrosive as a
+   false negative -- it trains you to ignore the check, and then it stops working
+   on the day it is right. Two independent pieces of evidence retired it: the
+   library's own canonical rules do not preserve field names (they would have to,
+   if it mattered), and run 31877157457 launched the release build on API 28 and 34
+   with fields renamed to `a` and `b` while a startup round-trip succeeded.
+
+   The behavioural check lives in the app instead: HomeViewModel performs an
+   un-caught serialization round-trip during startup, so genuine breakage becomes a
+   launch crash the release smoke test already catches.
 
 Reading mapping.txt
 -------------------
@@ -117,16 +136,19 @@ def main():
         else:
             print(f"  ok  required class present: {cls}")
 
+    # Informational only. Renamed fields are FINE -- see the module docstring for
+    # why, and for the two pieces of evidence that retired the assertion. Reported
+    # because it is useful to see what R8 did, not because it is a problem.
     for cls in serializable_classes(src_root):
         if cls not in mapping:
-            print(f"  --  @Serializable {cls} not in mapping (shrunk away; unused)")
+            print(f"  --  @Serializable {cls} shrunk away as unused")
             continue
         renamed = {k: v for k, v in mapping[cls][1].items() if k != v}
         if renamed:
-            failures.append(f"{cls}: @Serializable fields renamed {renamed} -- this IS the JSON wire format")
+            print(f"  ..  @Serializable {cls} fields renamed {renamed} (harmless: the "
+                  f"wire format lives in the generated descriptor, not the field names)")
         else:
-            kept = list(mapping[cls][1])
-            print(f"  ok  @Serializable fields kept: {cls} {kept}")
+            print(f"  ..  @Serializable {cls} fields unchanged")
 
     print()
     if failures:
