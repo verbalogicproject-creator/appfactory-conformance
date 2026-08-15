@@ -18,8 +18,8 @@ displayed eleven green builds of an app which crashed before rendering a pixel.
 | 4 | R8 / release compile succeeds | V5 | run 31871491105, step "Exercise R8" | ☑ **checked** |
 | 5 | Instrumented tests pass on API 28 and 34 | V6a | run 31871491150, both matrix jobs `connectedDebugAndroidTest` BUILD SUCCESSFUL | ☑ **checked** |
 | 6 | **The release build installs and launches** | V6a | run 31871491150: `PASS: the release build installs, launches, and survives` on API 28 (`TotalTime: 72395`) and API 34 (`TotalTime: 827`) | ☑ **checked** |
-| 7 | `v0.0.1` publishes a signed APK + AAB + mapping.txt | V7 | — | ☐ unchecked |
-| 8 | The published APK's cert digest matches the pin | V7 | — | ☐ unchecked |
+| 7 | `v0.0.1` publishes a signed APK + AAB + mapping.txt | V7 | Release `v0.0.1`: `conformance-v0.0.1.apk` 1346244b, `.aab` 1722571b, `mapping-v0.0.1.txt` 13138024b, `SHA256SUMS.txt` | ☑ **checked** |
+| 8 | The published APK's cert digest matches the pin | V7 | run 31872212446 `cert digest matches pin: 5b2d9ce7…7da7` (apksigner), **independently reproduced** on-device by `scripts/apk_cert.py` against the downloaded artifact | ☑ **checked** |
 | 9 | The APK installs on the physical device and runs | V7 | — | ☐ unchecked |
 | 10 | The on-screen git SHA matches the tagged commit | V7 | — | ☐ unchecked |
 | 11 | `v0.0.2` installs **over** `v0.0.1` | V6b | — | ☐ unchecked |
@@ -57,6 +57,16 @@ Use a token that appears nowhere in your source.
 empty list with exit 0 and no error, which reads as "the run hasn't appeared yet" and
 invites falling back to `--limit 1` — the exact race that once reported a fix as
 verified by a run that never compiled it.
+
+**Modern APKs have no `META-INF/*.RSA`.** AGP signs with APK Signature Scheme v2/v3
+only; there is no legacy v1 JAR signature to read. A fallback certificate reader
+written against `META-INF` therefore finds nothing and fails on *every* APK this
+pipeline produces — it was committed here as a "second independent path" and was
+dead code. Found only by verifying the published artifact independently rather than
+trusting the runner's green. The certificate lives in the APK Signing Block between
+the ZIP entries and the central directory; `scripts/apk_cert.py` parses it with the
+standard library alone, which is also what makes SDK-free verification possible on
+the aarch64 device.
 
 **A skip path that exits 0 is a green that proves nothing.** `emulator-verify.sh` can
 skip the launch smoke test when no signed APK exists. That branch was checked in the
