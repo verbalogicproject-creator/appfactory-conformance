@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
             ConformanceTheme {
                 val vm: HomeViewModel = hiltViewModel()
                 val count by vm.itemCount.collectAsStateWithLifecycle()
+                val serOk by vm.serializationOk.collectAsStateWithLifecycle()
                 val granted = remember(notificationsGranted) { notificationsGranted }
 
                 HomeScreen(
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
                     gitSha = BuildConfig.GIT_SHA,
                     itemCount = count,
                     notificationsGranted = granted,
+                    serializationOk = serOk,
                 )
             }
         }

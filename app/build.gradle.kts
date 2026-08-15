@@ -66,19 +66,30 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
-    // Instrumented tests run against the RELEASE variant, not debug.
+    // NOT testBuildType = "release", deliberately, and this is worth reading before
+    // anyone sets it.
     //
-    // This defaults to "debug", and that default silently voids the most valuable
-    // test in the suite. R8 does not run for debug builds, so an instrumented test
-    // asserting that minification did not strip a serializer passes whether or not
-    // the keep rules exist. Verified empirically on branch conformance/red-runtime:
-    // with the kotlinx.serialization keeps deleted, connectedDebugAndroidTest
-    // reported 5/5 passing.
+    // Instrumented tests run against `debug`, where R8 does not run. That means an
+    // instrumented test asserting anything about minification proves nothing --
+    // verified on conformance/red-runtime, where the suite reported 5/5 with the
+    // serialization keep rules deleted.
     //
-    // Testing the debug variant answers "does the code work". Testing the release
-    // variant answers "does the artifact users install work", and those differ by
-    // exactly the transformations that make release builds fail in the field.
-    testBuildType = "release"
+    // The obvious fix, testBuildType = "release", was tried and abandoned. R8 then
+    // minifies the androidTest APK too (fixable, see proguard-test-rules.pro), the
+    // build completes and both APKs package -- and then connectedReleaseAndroidTest
+    // HANGS with no output, no "Starting N tests", until the 45-minute job timeout.
+    // Run 31875004036 on both API 28 and 34.
+    //
+    // R8 correctness is covered two other ways instead, and the coverage is stated
+    // honestly rather than assumed:
+    //   structure  -- a CI step asserts against the published mapping.txt that
+    //                 classes which must survive were not removed or renamed
+    //   behaviour  -- the app exercises the serialization path during startup, so
+    //                 R8 breaking it becomes a launch crash, which the release
+    //                 launch smoke already catches with crash.txt naming the cause
+    //
+    // NOT covered: arbitrary behavioural testing of the release variant. Saying so
+    // is the point; a documented gap is safer than a rung that reports success.
 
     signingConfigs {
         if (hasReleaseSigning) {

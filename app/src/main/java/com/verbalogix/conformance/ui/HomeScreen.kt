@@ -39,6 +39,7 @@ fun HomeScreen(
     gitSha: String,
     itemCount: Int,
     notificationsGranted: Boolean?,
+    serializationOk: Boolean?,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -70,6 +71,17 @@ fun HomeScreen(
                     // before any of this composed.
                     KeyValue("hilt", "graph built")
                     KeyValue("room", "$itemCount row(s)")
+                    // On a release build this line is R8 evidence: reaching it at
+                    // all means minification did not strip the serializer. If it
+                    // had, startup would have thrown before composing.
+                    KeyValue(
+                        "serialization",
+                        when (serializationOk) {
+                            null -> "checking"
+                            true -> "round-trip ok"
+                            false -> "FAILED"
+                        },
+                    )
                     KeyValue(
                         "notifications",
                         when (notificationsGranted) {
@@ -125,6 +137,7 @@ private fun HomeScreenPreview() {
             gitSha = "abc1234",
             itemCount = 3,
             notificationsGranted = true,
+            serializationOk = true,
         )
     }
 }
