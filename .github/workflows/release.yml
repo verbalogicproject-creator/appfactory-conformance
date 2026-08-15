@@ -166,9 +166,32 @@ jobs:
           PIN=$(tr -d ': \n\t' < "$PIN_FILE" | tr 'A-F' 'a-f')
 
           # apksigner ships with the Android SDK, preinstalled on ubuntu-latest.
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
-          ACTUAL=$("$APKSIGNER" verify --print-certs "$APK" \
-            | grep -i 'SHA-256 digest' | head -1 | sed 's/.*: *//' | tr -d ': \n\t' | tr 'A-F' 'a-f')
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER=$(find "$SDK/build-tools" -name apksigner 2>/dev/null | sort -V | tail -1)
+
+          if [ -n "$APKSIGNER" ]; then
+            ACTUAL=$("$APKSIGNER" verify --print-certs "$APK" \
+              | grep -i 'SHA-256 digest' | head -1 | sed 's/.*: *//' | tr -d ': \n\t' | tr 'A-F' 'a-f')
+          else
+            # Fall back to reading the PKCS#7 signature block straight out of the
+            # APK. Pure Python, no SDK required -- so the pin is enforced even if
+            # the runner image moves the tooling. A check that silently degrades to
+            # "not verified" would be worse than no check at all.
+            echo "apksigner not found under $SDK; falling back to a direct certificate read"
+            pip install --quiet cryptography 2>/dev/null || true
+            ACTUAL=$(python3 - "$APK" <<'PY'
+import hashlib, re, sys, zipfile
+from cryptography.hazmat.primitives.serialization import pkcs7, Encoding
+
+with zipfile.ZipFile(sys.argv[1]) as z:
+    blocks = [n for n in z.namelist() if re.fullmatch(r'META-INF/.*\.(RSA|DSA|EC)', n)]
+    if not blocks:
+        sys.exit("no PKCS#7 signature block in the APK")
+    certs = pkcs7.load_der_pkcs7_certificates(z.read(blocks[0]))
+    print(hashlib.sha256(certs[0].public_bytes(Encoding.DER)).hexdigest())
+PY
+)
+          fi
 
           if [ -z "$ACTUAL" ]; then
             echo "::error::Could not read the signing certificate from the APK."
