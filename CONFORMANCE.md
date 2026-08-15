@@ -38,12 +38,43 @@ deliberately breaking things on a branch kept for the purpose.
 |---|---|---|
 | `@HiltAndroidApp` missing | compiles clean; throws at `onCreate` | preflight 060 + claim 6 |
 | `font_certs.xml` fabricated | valid to AAPT, semantic garbage; threw on first glyph | system fonts only + claim 6 |
-| R8 stripped the serializer | JVM unit tests don't run R8 | claim 5, instrumented against the **release** build |
+| R8 stripped the serializer | JVM unit tests don't run R8 | claim 5 — **but see below; this coverage was false until `testBuildType = "release"`** |
 | release signed with the runner's debug key | signed, just with a *different key each run* | claim 8, cert digest pin |
 | `proguard-rules.pro` referenced, absent | multi-line `proguardFiles` evaded a line-oriented grep | preflight 020 |
 | `shrinkResources` vs `isShrinkResources` | Kotlin DSL cannot be checked without compiling | claim 2 |
 | artifact upload matched nothing | `if-no-files-found` defaults to `warn` | `error` + claim 7 |
 | test gate passed on zero tests | `testDebugUnitTest` is NO-SOURCE, reports success | claim 3 |
+
+## The red branch falsified a claim this document had already made
+
+`conformance/red-runtime` deletes the `kotlinx.serialization` keep rules and nothing
+else. The prediction was: everything cheap goes green, the emulator goes red on
+`serializationSurvivesMinification`. What actually happened:
+
+```
+> Task :app:connectedDebugAndroidTest
+Starting 5 tests ... BUILD SUCCESSFUL
+```
+
+**`testBuildType` defaults to `debug`, and R8 does not run for debug builds.** The
+instrumented test written specifically to prove minification had not stripped the
+serializer passed 5/5 with the keep rules deleted. The test existed, executed,
+reported success, and verified nothing — the same shape as a `testDebugUnitTest`
+gate on an empty suite.
+
+The rung *did* go red, but for an unrelated reason: `INSTALL_FAILED_VERSION_DOWNGRADE`,
+because an untagged branch build carries `versionCode 1` while `v0.0.2` carries 2.
+**And the error message asserted "Signing key drift orphans every install"** — a
+diagnosis nothing had checked. A red step naming the wrong cause sends you
+debugging something that is not broken, which is the same failure class as a green
+tick on the wrong commit.
+
+Both are fixed: `testBuildType = "release"`, and the upgrade check now compares
+versionCodes first and reports whichever cause Android actually gave.
+
+The lesson generalises past this repo: **a verification rung must itself be
+falsified before its coverage can be claimed.** This one was asserted in three
+separate commit messages and one README table before anyone tested it.
 
 ## Operational lessons found while proving these claims
 

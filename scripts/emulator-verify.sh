@@ -19,16 +19,7 @@ FAILED=0
 fail() { echo "::error::$1"; FAILED=1; }
 
 echo "=============================================================="
-echo " 1. instrumented tests (debug variant)"
-echo "=============================================================="
-# Debug variant: androidTest needs the test APK, and the debug variant is the one
-# with the test manifest. This covers Hilt graph construction and the Compose tree.
-./gradlew connectedDebugAndroidTest --stacktrace 2>&1 | tee "$OUT/instrumented.log" \
-  || fail "instrumented tests failed"
-
-echo
-echo "=============================================================="
-echo " 2. release build -- the artifact users actually install"
+echo " 1. decode the signing key (needed before ANY release task)"
 echo "=============================================================="
 if [ -n "${SIGNING_KEY_BASE64:-}" ]; then
   printf '%s' "$SIGNING_KEY_BASE64" | base64 -d > "$SIGNING_KEYSTORE_PATH"
@@ -39,9 +30,27 @@ if [ -n "${SIGNING_KEY_BASE64:-}" ]; then
     echo "keystore decoded ($sz bytes)"
   fi
 else
-  echo "no signing secrets; release will be unsigned and step 3 will be skipped"
+  echo "no signing secrets; the release variant will be unsigned and uninstallable"
 fi
 
+echo
+echo "=============================================================="
+echo " 2. instrumented tests against the RELEASE variant"
+echo "=============================================================="
+# testBuildType = "release" in build.gradle.kts, so this runs the tests against the
+# R8-minified, signed artifact.
+#
+# It ran against DEBUG until conformance/red-runtime proved that useless: R8 does
+# not run for debug, so the test asserting minification had not stripped the
+# serializer passed 5/5 with the keep rules deleted. The test existed, executed,
+# reported success, and verified nothing.
+./gradlew connectedReleaseAndroidTest --stacktrace 2>&1 | tee "$OUT/instrumented.log" \
+  || fail "instrumented tests failed against the release build"
+
+echo
+echo "=============================================================="
+echo " 3. the artifact users actually install"
+echo "=============================================================="
 ./gradlew assembleRelease --stacktrace 2>&1 | tee "$OUT/release-build.log" \
   || fail "release build failed"
 
@@ -56,8 +65,11 @@ fi
 
 echo
 echo "=============================================================="
-echo " 3. install and launch the RELEASE build"
+echo " 4. install and launch the RELEASE build"
 echo "=============================================================="
+# connectedReleaseAndroidTest already installed a build; remove it so this is a
+# clean install rather than an implicit upgrade.
+adb uninstall "$PKG" >/dev/null 2>&1 || true
 adb install -r "$APK" 2>&1 | tee "$OUT/install.log" || fail "release APK would not install"
 adb logcat -c
 
@@ -89,7 +101,7 @@ fi
 
 echo
 echo "=============================================================="
-echo " 4. upgrade continuity -- does this install OVER the last release?"
+echo " 5. upgrade continuity -- does this install OVER the last release?"
 echo "=============================================================="
 # The failure with no recovery path. If the signing key changes, no installed device
 # will ever accept an update: Android rejects it with
@@ -103,28 +115,55 @@ echo "=============================================================="
 PREV=$(gh release list --limit 10 --json tagName --jq '.[].tagName' 2>/dev/null \
        | grep -v "^${GITHUB_REF_NAME:-}$" | head -1)
 
+# versionCode of both artifacts. An untagged branch build carries the local default
+# (1), so installing it over a later release is a DOWNGRADE, not a signing failure.
+# Running the check anyway produces a red build blaming the wrong cause -- which is
+# exactly what happened on conformance/red-runtime, where this step reported
+# "Signing key drift orphans every install" for what was a version downgrade.
+vcode() { "$AAPT" dump badging "$1" 2>/dev/null | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1; }
+AAPT=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name aapt2 2>/dev/null | sort -V | tail -1)
+
 if [ -z "$PREV" ]; then
   echo "no previous release to upgrade from; skipping (this is the first)"
+elif [ -z "$AAPT" ]; then
+  echo "aapt2 not found; skipping the upgrade check rather than guessing"
 else
   echo "previous release: $PREV"
   rm -rf /tmp/prev && mkdir -p /tmp/prev
-  if gh release download "$PREV" -p '*.apk' -D /tmp/prev 2>/dev/null; then
+  if ! gh release download "$PREV" -p '*.apk' -D /tmp/prev 2>/dev/null; then
+    echo "could not download $PREV; skipping the upgrade check"
+  else
     PREV_APK=$(find /tmp/prev -name '*.apk' | head -1)
-    adb uninstall "$PKG" >/dev/null 2>&1 || true
-    if adb install "$PREV_APK" 2>&1 | tee "$OUT/install-prev.log" | grep -q 'Success'; then
-      echo "installed $PREV"
-      # -r replaces in place. It fails if the signing certificate differs.
-      if adb install -r "$APK" 2>&1 | tee "$OUT/upgrade.log" | grep -q 'Success'; then
+    NEW_VC=$(vcode "$APK"); PREV_VC=$(vcode "$PREV_APK")
+    echo "versionCode: $PREV=$PREV_VC  current=$NEW_VC"
+
+    if [ -n "$NEW_VC" ] && [ -n "$PREV_VC" ] && [ "$NEW_VC" -lt "$PREV_VC" ]; then
+      # Real and expected on any untagged build. Not a defect, and saying nothing
+      # would be as bad as blaming the wrong thing.
+      echo "SKIP: current versionCode ($NEW_VC) is older than $PREV ($PREV_VC)."
+      echo "      Untagged builds carry the local default. Upgrade continuity is"
+      echo "      only meaningful for a tagged release, where versionCode derives"
+      echo "      from the tag."
+    else
+      adb uninstall "$PKG" >/dev/null 2>&1 || true
+      if ! adb install "$PREV_APK" 2>&1 | tee "$OUT/install-prev.log" | grep -q 'Success'; then
+        echo "could not install $PREV; skipping the upgrade check"
+      elif adb install -r "$APK" 2>&1 | tee "$OUT/upgrade.log" | grep -q 'Success'; then
         echo "upgrade OK: $PREV -> ${GITHUB_REF_NAME:-current}"
       else
         cat "$OUT/upgrade.log"
-        fail "UPGRADE FAILED -- the new build cannot replace $PREV. Signing key drift orphans every install."
+        # Name the cause Android reported. Do NOT assert a diagnosis the evidence
+        # does not support -- a check that blames the wrong thing sends you
+        # debugging something that is not broken.
+        if grep -q 'INSTALL_FAILED_UPDATE_INCOMPATIBLE' "$OUT/upgrade.log"; then
+          fail "SIGNING KEY DRIFT: $PREV and this build have different certificates. Every installed device is orphaned permanently."
+        elif grep -q 'INSTALL_FAILED_VERSION_DOWNGRADE' "$OUT/upgrade.log"; then
+          fail "VERSION DOWNGRADE: this build's versionCode is older than $PREV. Not a signing problem."
+        else
+          fail "UPGRADE FAILED over $PREV -- see the adb output above for the reason."
+        fi
       fi
-    else
-      echo "could not install $PREV; skipping the upgrade check"
     fi
-  else
-    echo "could not download $PREV; skipping the upgrade check"
   fi
 fi
 

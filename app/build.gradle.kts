@@ -66,6 +66,20 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Instrumented tests run against the RELEASE variant, not debug.
+    //
+    // This defaults to "debug", and that default silently voids the most valuable
+    // test in the suite. R8 does not run for debug builds, so an instrumented test
+    // asserting that minification did not strip a serializer passes whether or not
+    // the keep rules exist. Verified empirically on branch conformance/red-runtime:
+    // with the kotlinx.serialization keeps deleted, connectedDebugAndroidTest
+    // reported 5/5 passing.
+    //
+    // Testing the debug variant answers "does the code work". Testing the release
+    // variant answers "does the artifact users install work", and those differ by
+    // exactly the transformations that make release builds fail in the field.
+    testBuildType = "release"
+
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
