@@ -11,22 +11,17 @@
 -renamesourcefileattribute SourceFile
 
 # --- kotlinx.serialization -------------------------------------------------------
-# Without these, R8 strips or renames the generated serializer and the @Serializable
-# class's field names. The build stays green, unit tests on the JVM still pass
-# (no R8 there), and JSON parsing fails only at runtime in the release build.
+# DELIBERATELY REMOVED on this branch.
 #
-# This is why the conformance app round-trips a DTO in an INSTRUMENTED test against
-# the release variant -- a unit test alone passes with these rules deleted.
--if @kotlinx.serialization.Serializable class **
--keepclassmembers class <1> {
-    static <1>$Companion Companion;
-}
--if @kotlinx.serialization.Serializable class ** {
-    static **$* *;
-}
--keepclassmembers class <2>$<3> {
-    kotlinx.serialization.KSerializer serializer(...);
-}
--keepclasseswithmembers class ** {
-    @kotlinx.serialization.Serializable <fields>;
-}
+# This is the conformance suite's negative test for the emulator rung. With the keep
+# rules gone, R8 renames the @Serializable class's fields and strips the generated
+# serializer. Nothing cheap notices:
+#
+#   preflight   PASS  nothing structural is wrong
+#   compile     PASS  the Kotlin is valid
+#   unit tests  PASS  R8 does not run for JVM unit tests
+#   R8/bundle   PASS  minification succeeds; it just removes the wrong things
+#   emulator    must FAIL, against the release build
+#
+# If the emulator run goes GREEN on this branch, that rung is decorative and the
+# claim that it catches runtime-only failures is false.
