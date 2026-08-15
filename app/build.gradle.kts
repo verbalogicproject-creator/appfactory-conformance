@@ -112,9 +112,16 @@ android {
     }
 
     // MigrationTestHelper reads the exported schemas at RUNTIME, from the test APK's
-    // assets. Without this the schemas exist in the repo, the test compiles, and it
-    // fails on device with "Cannot find the schema file in the assets folder" -- a
-    // build-config omission that presents as a test bug.
+    // assets, so they have to be on the androidTest asset path.
+    //
+    // This alone is NOT enough, and the gap is easy to miss: the schema files must
+    // also be COMMITTED. A clean CI checkout has no app/schemas/, and the androidTest
+    // asset merge does not wait for KSP to generate them, so the test APK ships
+    // without the schema and fails on device with "Cannot find the schema file in the
+    // assets folder". It looks like a test bug and is a missing-file bug.
+    //
+    // Preflight check 9 enforces that every declared @Database version has a
+    // committed schema.
     sourceSets {
         getByName("androidTest") {
             assets.srcDirs(files("$projectDir/schemas"))

@@ -262,6 +262,35 @@ PY
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# 9. Every declared @Database version has a committed schema JSON.
+#     Catches "bumped the version, forgot to commit the schema", which fails at
+#     RUNTIME on the emulator with
+#       FileNotFoundException: Cannot find the schema file in the assets folder
+#     and reads like a broken test rather than a missing file.
+#
+#     Committing matters because a clean CI checkout has no app/schemas/, and the
+#     androidTest asset merge does not wait for KSP to write it. Putting the
+#     directory on the asset path is necessary but not sufficient.
+#
+#     Only meaningful with exportSchema = true; skipped otherwise.
+# ---------------------------------------------------------------------------
+if [ -n "${SRC_DIRS:-}" ] && grep -rqE '@Database\b' $SRC_DIRS 2>/dev/null; then
+  db_ok=1
+  # `version = N` inside the @Database annotation, which may span lines.
+  db_ver=$(perl -0777 -ne 'print "$1\n" while /\@Database\s*\((.*?)\)/gs' $(grep -rlE '@Database\b' $SRC_DIRS 2>/dev/null) 2>/dev/null \
+           | perl -ne 'print "$1\n" if /version\s*=\s*(\d+)/')
+  for v in $db_ver; do
+    if ! find app/schemas -name "$v.json" 2>/dev/null | grep -q .; then
+      fail "@Database declares version $v but no committed app/schemas/**/$v.json exists"
+      db_ok=0
+    fi
+  done
+  if [ -n "$db_ver" ] && [ $db_ok -eq 1 ]; then
+    pass "every @Database version has a committed schema ($(echo $db_ver | tr '\n' ' '))"
+  fi
+fi
+
 echo
 if [ $FAIL -eq 0 ]; then
   printf '\033[32mPreflight clean.\033[0m Push and watch: gh run watch --exit-status\n'
