@@ -66,30 +66,10 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
-    // NOT testBuildType = "release", deliberately, and this is worth reading before
-    // anyone sets it.
-    //
-    // Instrumented tests run against `debug`, where R8 does not run. That means an
-    // instrumented test asserting anything about minification proves nothing --
-    // verified on conformance/red-runtime, where the suite reported 5/5 with the
-    // serialization keep rules deleted.
-    //
-    // The obvious fix, testBuildType = "release", was tried and abandoned. R8 then
-    // minifies the androidTest APK too (fixable, see proguard-test-rules.pro), the
-    // build completes and both APKs package -- and then connectedReleaseAndroidTest
-    // HANGS with no output, no "Starting N tests", until the 45-minute job timeout.
-    // Run 31875004036 on both API 28 and 34.
-    //
-    // R8 correctness is covered two other ways instead, and the coverage is stated
-    // honestly rather than assumed:
-    //   structure  -- a CI step asserts against the published mapping.txt that
-    //                 classes which must survive were not removed or renamed
-    //   behaviour  -- the app exercises the serialization path during startup, so
-    //                 R8 breaking it becomes a launch crash, which the release
-    //                 launch smoke already catches with crash.txt naming the cause
-    //
-    // NOT covered: arbitrary behavioural testing of the release variant. Saying so
-    // is the point; a documented gap is safer than a rung that reports success.
+    // Re-enabled to REPRODUCE the hang, not to ship.
+    // scripts/diagnose-release-tests.sh asks the device what it actually sees,
+    // instead of waiting 45 minutes for a timeout with no output.
+    testBuildType = "release"
 
     signingConfigs {
         if (hasReleaseSigning) {
